@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "API Catcher",
   "version": "0.1.0",
+  "minimum_chrome_version": "111",
   "description": "抓取网页接口调用,生成 curl,支持搜索过滤与导出",
   "permissions": ["storage", "scripting", "activeTab", "tabs"],
   "host_permissions": ["<all_urls>"],
