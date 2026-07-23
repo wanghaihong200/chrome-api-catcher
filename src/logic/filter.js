@@ -1,4 +1,4 @@
-import blacklist from '../data/trackerBlacklist.json' with { type: 'json' };
+import blacklist from '../data/trackerBlacklist.js';
 
 const DROP_TYPES = new Set(['script', 'stylesheet', 'image', 'font', 'media', 'manifest', 'eventsource', 'websocket']);
 

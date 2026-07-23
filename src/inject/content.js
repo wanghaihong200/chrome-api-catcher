@@ -5,6 +5,6 @@
     const data = event.data;
     if (!data || data.TAG !== TAG || data.source !== 'inject') return;
     const { TAG: _tag, ...raw } = data;
-    chrome.runtime.sendMessage({ type: 'RECORD_INJECT', raw });
+    chrome.runtime.sendMessage({ type: 'RECORD_INJECT', raw }).catch(() => {});
   });
 })();

@@ -1,0 +1,22 @@
+// 埋点/统计域名关键词黑名单(子串匹配,小写)
+export default [
+  'google-analytics.com',
+  'googletagmanager.com',
+  'doubleclick.net',
+  'facebook.net',
+  'connect.facebook.net',
+  'hotjar.com',
+  'sentry.io',
+  'mixpanel.com',
+  'segment.io',
+  'umeng.com',
+  'umengcloud.com',
+  'growingio.com',
+  'bmpst',
+  'hm.baidu.com',
+  'cnzz.com',
+  'umtrack.com',
+  'mmstat.com',
+  'plausible.io',
+  'amplitude.com',
+];

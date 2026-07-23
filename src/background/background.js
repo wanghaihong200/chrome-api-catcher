@@ -1,4 +1,5 @@
 import { openDB, putRequest, getRequest, getBody, listRequests } from './db.js';
+// getBody 预留给 Phase 2 详情懒加载 body;pickMoreComplete 预留给 Phase 2 合并增强
 import { shouldKeep } from '../logic/filter.js';
 import { makeKey, findDuplicate, pickMoreComplete } from './dedupe.js';
 import { normalizeInjectRecord, normalizeDevtoolsRecord } from '../logic/normalize.js';

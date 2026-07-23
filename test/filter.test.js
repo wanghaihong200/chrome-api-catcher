@@ -18,6 +18,7 @@ describe('shouldKeep', () => {
       'https://a.com/app.js', 'https://a.com/style.css', 'https://a.com/a.png',
       'https://a.com/b.JPG', 'https://a.com/c.WEBP', 'https://a.com/f.woff2',
       'https://a.com/i.ico', 'https://a.com/v.mp4',
+      'https://a.com/app.js?v=1.2.3', 'https://a.com/style.css#hash',
     ]) {
       expect(shouldKeep({ url: u, resourceType: 'fetch' })).toBe(false);
     }
