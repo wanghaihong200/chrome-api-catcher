@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8" /><title>API Catcher 测试页</title></head>
+<body>
+  <h2>API Catcher 集成测试页</h2>
+  <button onclick="getJson()">GET JSON(fetch)</button>
+  <button onclick="postJson()">POST JSON(fetch)</button>
+  <button onclick="xhrGet()">GET JSON(XHR)</button>
+  <button onclick="upload()">multipart 上传</button>
+  <button onclick="hitTracker()">埋点 URL(应被过滤)</button>
+  <button onclick="loadScript()">加载 .js(应被过滤)</button>
+  <pre id="out"></pre>
+  <script>
+    const out = document.getElementById('out');
+    const log = (s) => { out.textContent += s + '\n'; };
+    const api = 'https://httpbin.org';
+    async function getJson() { log(JSON.stringify(await (await fetch(api + '/get?id=1')).json())); }
+    async function postJson() { log(JSON.stringify(await (await fetch(api + '/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a: 1 }) })).json())); }
+    function xhrGet() { const x = new XMLHttpRequest(); x.open('GET', api + '/get?id=xhr'); x.onload = () => log('xhr ' + x.status); x.send(); }
+    async function upload() { const fd = new FormData(); fd.append('f', new Blob(['hi']), 'f.txt'); log(JSON.stringify(await (await fetch(api + '/anything', { method: 'POST', body: fd })).status)); }
+    async function hitTracker() { try { await fetch('https://www.google-analytics.com/collect?t=event'); } catch (e) { log('tracker blocked by CORS,正常'); } }
+    function loadScript() { const s = document.createElement('script'); s.src = api + '/anything.js'; document.body.appendChild(s); }
+  </script>
+</body>
+</html>
