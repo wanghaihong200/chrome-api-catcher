@@ -28,34 +28,33 @@
       body = init?.body ?? null;
     }
     const isBodyBinary = body && !(typeof body === 'string');
-    let bodyText = null;
-    if (typeof body === 'string') bodyText = body;
+    const bodyText = typeof body === 'string' ? body : null;
 
-    let response, error;
+    let response;
     try {
       response = await origFetch.apply(this, arguments);
     } catch (e) {
-      error = e; throw e;
-    } finally {
-      if (response) {
-        try {
-          const clone = response.clone();
-          const text = await clone.text();
+      throw e; // 不吞错误,让页面看到网络异常
+    }
+    if (response) {
+      // 同步快照(detached 读取时 response 可能已被页面消耗)
+      const status = response.status;
+      const statusText = response.statusText;
+      const respHeaders = headersToObject(response.headers);
+      const mimeType = response.headers.get('content-type') || '';
+      // detached: 不阻塞返回,流式响应不被破坏
+      response.clone().text()
+        .then((text) => {
           send({
             source: 'inject',
             timestamp: Date.now(),
             duration: Math.round(performance.now() - t0),
             resourceType: 'fetch',
             request: { url, method, headers, body: bodyText, isBodyBinary: !!isBodyBinary },
-            response: {
-              status: response.status, statusText: response.statusText,
-              headers: headersToObject(response.headers),
-              body: text, mimeType: response.headers.get('content-type') || '',
-              isBodyBinary: false,
-            },
+            response: { status, statusText, headers: respHeaders, body: text, mimeType, isBodyBinary: false },
           });
-        } catch { /* 读取响应体失败则忽略,不影响页面 */ }
-      }
+        })
+        .catch(() => { /* 读取响应体失败则忽略,不影响页面 */ });
     }
     return response;
   };
@@ -80,21 +79,23 @@
       meta.body = typeof body === 'string' ? body : null;
       meta.isBodyBinary = !!isBodyBinary;
       this.addEventListener('loadend', () => {
-        let text = null;
-        try { text = this.responseText; } catch { /* 某些类型无 responseText */ }
-        send({
-          source: 'inject',
-          timestamp: Date.now(),
-          duration: Math.round(performance.now() - meta.t0),
-          resourceType: 'xhr',
-          request: { url: meta.url, method: meta.method, headers: meta.headers, body: meta.body, isBodyBinary: meta.isBodyBinary },
-          response: {
-            status: this.status, statusText: this.statusText,
-            headers: parseRawHeaders(this.getAllResponseHeaders()),
-            body: text, mimeType: this.getResponseHeader('content-type') || '',
-            isBodyBinary: false,
-          },
-        });
+        try {
+          let text = null;
+          try { text = this.responseText; } catch { /* 某些类型无 responseText */ }
+          send({
+            source: 'inject',
+            timestamp: Date.now(),
+            duration: Math.round(performance.now() - meta.t0),
+            resourceType: 'xhr',
+            request: { url: meta.url, method: meta.method, headers: meta.headers, body: meta.body, isBodyBinary: meta.isBodyBinary },
+            response: {
+              status: this.status, statusText: this.statusText,
+              headers: parseRawHeaders(this.getAllResponseHeaders()),
+              body: text, mimeType: this.getResponseHeader('content-type') || '',
+              isBodyBinary: false,
+            },
+          });
+        } catch { /* 忽略,不影响页面 */ }
       });
     }
     return OrigSend.apply(this, arguments);
