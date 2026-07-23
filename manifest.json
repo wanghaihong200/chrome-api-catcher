@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "API Catcher",
+  "version": "0.1.0",
+  "description": "抓取网页接口调用,生成 curl,支持搜索过滤与导出",
+  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "src/background/background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/inject/content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/inject/inject.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "devtools_page": "src/devtools/devtools.html",
+  "action": { "default_title": "API Catcher" }
+}
