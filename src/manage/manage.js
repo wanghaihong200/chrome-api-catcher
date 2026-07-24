@@ -5,7 +5,13 @@ import { toCurl, hasSensitive } from '../logic/curl.js';
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
-const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null, selected: new Set() };
+const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null, selected: new Set(), newCount: 0, pendingIds: new Set(), refreshTimer: null };
+
+function isLiveView() {
+  const hasFilter = $('searchInput').value.trim() || $('methodFilter').value || $('statusFilter').value
+    || $('timeFilter').value || $('responseTimeFilter').value;
+  return state.page === 1 && !hasFilter;
+}
 
 // ---- 注入图标 ----
 $('logoIcon').innerHTML = ICONS.logo;
@@ -296,6 +302,39 @@ async function toggleGlobal() {
   toast(r.global ? '全局录制已开启' : '全局录制已关闭', 'info');
 }
 
+// ---- 实时刷新(debounce + 智能暂停) ----
+const REFRESH_DEBOUNCE_MS = 250;
+const ALL_MAX = 5000;
+
+function scheduleRefresh() {
+  if (state.refreshTimer) return;
+  state.refreshTimer = setTimeout(() => { state.refreshTimer = null; flushPending(); }, REFRESH_DEBOUNCE_MS);
+}
+
+function stripDetail(d) {
+  const { requestBody, responseBody, requestBodyIsBinary, responseBodyIsBinary, ...meta } = d;
+  return meta;
+}
+
+async function flushPending() {
+  if (state.pendingIds.size === 0) return;
+  const ids = [...state.pendingIds];
+  state.pendingIds.clear();
+  const res = await send({ type: 'GET_DETAILS_BY_IDS', ids });
+  const details = res?.details || [];
+  const byId = new Map(details.map((d) => [d.id, d]));
+  for (const id of ids) {
+    const d = byId.get(id);
+    if (!d) continue;
+    const idx = state.all.findIndex((r) => r.id === id);
+    if (idx >= 0) state.all[idx] = { ...state.all[idx], ...stripDetail(d) };
+    else { state.all.unshift(stripDetail(d)); if (state.all.length > ALL_MAX) state.all.pop(); }
+  }
+  state.all.sort((a, b) => b.timestamp - a.timestamp);
+  if (isLiveView()) { renderStats(); applyFilters(); }
+  else { state.newCount += details.length; showNewBadge(); renderStats(); }
+}
+
 // ---- 数据加载 ----
 async function loadAll() {
   const res = await send({ type: 'GET_ALL' });
@@ -354,6 +393,22 @@ $('clearFiltersBtn').addEventListener('click', () => {
   ['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => ($(id).value = ''));
   applyFilters();
 });
+
+// ---- 新请求提示条 ----
+function showNewBadge() {
+  const badge = $('newBadge');
+  if (!badge) return;
+  badge.classList.remove('hidden');
+  const label = $('newBadgeCount');
+  if (label) label.textContent = state.newCount;
+}
+function hideNewBadge() {
+  state.newCount = 0;
+  const b = $('newBadge');
+  if (b) b.classList.add('hidden');
+}
+const nbv = $('newBadgeView');
+if (nbv) nbv.addEventListener('click', async () => { hideNewBadge(); state.page = 1; await loadAll(); });
 $('refreshBtn').addEventListener('click', async () => { await loadAll(); toast('已刷新'); });
 $('globalToggle').addEventListener('click', toggleGlobal);
 $('closeModalBtn').addEventListener('click', closeDetail);
@@ -373,5 +428,11 @@ for (const [id, fmt] of [['exportPostman','postman'],['exportJmeter','jmeter'],[
 loadGlobalToggle();
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.recording) syncGlobalToggle(!!changes.recording.newValue?.global);
+});
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg) return;
+  if (msg.type === 'NEW_REQUEST' || msg.type === 'REQUEST_UPDATED') {
+    if (msg.id) { state.pendingIds.add(msg.id); scheduleRefresh(); }
+  }
 });
 loadAll();
