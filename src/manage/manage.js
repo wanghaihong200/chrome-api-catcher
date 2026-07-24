@@ -1,9 +1,10 @@
 import { ICONS } from './icons.js';
+import { exportAs } from '../logic/exporters/index.js';
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
-const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null };
+const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null, selected: new Set() };
 
 // ---- 注入图标 ----
 $('logoIcon').innerHTML = ICONS.logo;
@@ -108,16 +109,44 @@ function renderTable() {
   const slice = filtered.slice(start, start + pageSize);
   tbody.innerHTML = slice.map((r) => `
     <tr class="table-row-hover border-b border-surface-50" data-id="${r.id}">
+      <td class="px-4 py-4"><input type="checkbox" class="row-check w-4 h-4 accent-brand-500" data-id="${r.id}" ${state.selected.has(r.id) ? 'checked' : ''}></td>
       <td class="px-5 py-4"><span class="method-badge method-${r.method}">${r.method}</span></td>
       <td class="px-4 py-4"><div class="text-[13px] text-surface-500 font-mono truncate max-w-[320px]" title="${escapeHtml(r.url)}">${escapeHtml(r.url)}</div></td>
       <td class="px-4 py-4"><span class="status-badge status-${statusClass(r.status)}"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:currentColor"></span>${r.status}</span></td>
       <td class="px-4 py-4"><div class="time-indicator"><span class="time-dot time-${timeClass(r.duration)}"></span><span class="text-[13px] text-surface-600 font-mono">${r.duration || 0}ms</span></div></td>
       <td class="px-4 py-4"><span class="text-[12px] text-surface-400">${formatTime(r.timestamp)}</span></td>
-      <td class="px-5 py-4 text-right"><button class="detail-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}">${ICONS.eye}</button></td>
+      <td class="px-5 py-4 text-right whitespace-nowrap">
+        <button class="curl-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}" title="复制 cURL">${ICONS.copy || ''}</button>
+        <button class="detail-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}" title="详情">${ICONS.eye}</button>
+      </td>
     </tr>`).join('');
   $('emptyState').classList.toggle('hidden', filtered.length > 0);
   const from = filtered.length ? start + 1 : 0;
   $('showingInfo').textContent = `显示 ${from}-${start + slice.length} 条,共 ${filtered.length} 条`;
+
+
+
+}
+// ---- 选择 / 批量操作条 ----
+function syncSelectionBar() {
+  const bar = $('selectionBar');
+  const countEl = $('selectedCount');
+  if (!bar) return;
+  const n = state.selected.size;
+  bar.classList.toggle('hidden', n === 0);
+  if (countEl) countEl.textContent = `${n} 条`;
+}
+
+function toggleSelect(id, checked) {
+  if (checked) state.selected.add(id); else state.selected.delete(id);
+  syncSelectionBar();
+}
+
+function selectAllFiltered(checked) {
+  if (checked) state.filtered.forEach((r) => state.selected.add(r.id));
+  else state.filtered.forEach((r) => state.selected.delete(r.id));
+  renderTable();
+  syncSelectionBar();
 }
 
 function renderPagination() {
@@ -233,6 +262,27 @@ async function loadAll() {
   applyFilters();
 }
 
+// ---- 导出下载 ----
+function extOf(format) {
+  return { postman: 'json', jmeter: 'jmx', har: 'har', json: 'json' }[format] || 'txt';
+}
+
+async function doExport(format) {
+  const ids = state.selected.size ? [...state.selected] : state.filtered.map((r) => r.id);
+  if (!ids.length) { toast('没有可导出的请求', 'error'); return; }
+  const res = await send({ type: 'GET_DETAILS_BY_IDS', ids });
+  const details = res?.details || [];
+  if (!details.length) { toast('读取详情失败', 'error'); return; }
+  const text = exportAs(format, details);
+  const blob = new Blob([text], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `api-catcher-${format}-${Date.now()}.${extOf(format)}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`已导出 ${details.length} 条(${format})`);
+}
+
 // ---- 事件绑定 ----
 $('searchInput').addEventListener('input', applyFilters);
 ['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => $(id).addEventListener('change', applyFilters));
@@ -245,6 +295,16 @@ $('tableBody').addEventListener('click', (e) => {
   const b = e.target.closest('.detail-open'); if (!b) return;
   openDetail(b.dataset.id);
 });
+$('tableBody').addEventListener('change', (e) => {
+  const cb = e.target.closest('.row-check');
+  if (!cb) return;
+  toggleSelect(cb.dataset.id, cb.checked);
+});
+const selectAllCb = $('selectAll');
+if (selectAllCb) selectAllCb.addEventListener('change', (e) => selectAllFiltered(e.target.checked));
+const clearSelBtn = $('clearSelectionBtn');
+if (clearSelBtn) clearSelBtn.addEventListener('click', () => { state.selected.clear(); renderTable(); syncSelectionBar(); });
+
 $('clearFiltersBtn').addEventListener('click', () => {
   $('searchInput').value = '';
   ['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => ($(id).value = ''));
@@ -256,6 +316,11 @@ $('closeModalBtn').addEventListener('click', closeDetail);
 $('modalBackdrop').addEventListener('click', closeDetail);
 document.querySelectorAll('.detail-tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
+
+for (const [id, fmt] of [['exportPostman','postman'],['exportJmeter','jmeter'],['exportHar','har'],['exportJson','json']]) {
+  const btn = $(id);
+  if (btn) btn.addEventListener('click', () => doExport(fmt));
+}
 
 // ---- 启动 ----
 loadGlobalToggle();
