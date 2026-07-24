@@ -2,9 +2,9 @@ export const DB_NAME = 'api-catcher';
 export const DB_VERSION = 1;
 export const INLINE_MAX = 64 * 1024;
 
-export function openDB() {
+function openWithUpgrade(name, version) {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(name, version);
     req.onupgradeneeded = () => {
       const idb = req.result;
       if (!idb.objectStoreNames.contains('requests')) {
@@ -19,6 +19,17 @@ export function openDB() {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+// 幂等打开:若库已存在但 store 缺失(残留/损坏),bump 版本触发 upgrade 重建 schema
+export async function openDB() {
+  let db = await openWithUpgrade(DB_NAME, DB_VERSION);
+  if (!db.objectStoreNames.contains('requests') || !db.objectStoreNames.contains('bodies')) {
+    const next = (db.version || DB_VERSION) + 1;
+    db.close();
+    db = await openWithUpgrade(DB_NAME, next);
+  }
+  return db;
 }
 
 function tx(idb, store, mode) {
