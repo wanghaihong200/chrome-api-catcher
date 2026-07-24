@@ -23,5 +23,5 @@
     }
   ],
   "devtools_page": "src/devtools/devtools.html",
-  "action": { "default_title": "API Catcher" }
+  "action": { "default_title": "API Catcher", "default_popup": "src/popup/popup.html" }
 }

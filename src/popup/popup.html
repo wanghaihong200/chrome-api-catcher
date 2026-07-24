@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="header">
+    <div class="logo">◈</div>
+    <div>
+      <div class="title">API Catcher</div>
+      <div class="subtitle" id="statusText">录制已关闭</div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <div class="row-title">全局录制</div>
+      <div class="row-desc">总开关,关闭则全部不录</div>
+    </div>
+    <div id="globalToggle" class="toggle"></div>
+  </div>
+  <div class="row">
+    <div>
+      <div class="row-title">当前标签页</div>
+      <div class="row-desc" id="tabDesc">—</div>
+    </div>
+    <div id="tabToggle" class="toggle"></div>
+  </div>
+  <button id="openManage" class="manage-btn">打开管理页</button>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
