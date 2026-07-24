@@ -323,16 +323,18 @@ async function flushPending() {
   const res = await send({ type: 'GET_DETAILS_BY_IDS', ids });
   const details = res?.details || [];
   const byId = new Map(details.map((d) => [d.id, d]));
+  let newItems = 0;
+  // 用 id 是否已存在于 state.all 判断 insert vs update(而非依赖消息 type):幂等且对竞态更鲁棒。
   for (const id of ids) {
     const d = byId.get(id);
     if (!d) continue;
     const idx = state.all.findIndex((r) => r.id === id);
     if (idx >= 0) state.all[idx] = { ...state.all[idx], ...stripDetail(d) };
-    else { state.all.unshift(stripDetail(d)); if (state.all.length > ALL_MAX) state.all.pop(); }
+    else { state.all.unshift(stripDetail(d)); if (state.all.length > ALL_MAX) state.all.pop(); newItems++; }
   }
   state.all.sort((a, b) => b.timestamp - a.timestamp);
   if (isLiveView()) { renderStats(); applyFilters(); }
-  else { state.newCount += details.length; showNewBadge(); renderStats(); }
+  else { state.newCount += newItems; showNewBadge(); renderStats(); }
 }
 
 // ---- 数据加载 ----
