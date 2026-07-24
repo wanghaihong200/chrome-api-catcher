@@ -200,3 +200,13 @@ export async function findDuplicateByRequest(db, { method, url, timestamp, bodyS
   }
   return null;
 }
+
+/** 批量取详情(合并 body + isBinary)。单次消息调用;内部每条独立事务以规避 IDB 自动提交。 */
+export async function getDetailsByIds(db, ids) {
+  const out = [];
+  for (const id of ids || []) {
+    const d = await getRequestDetail(db, id);
+    if (d) out.push(d);
+  }
+  return out;
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
-import { openDB, putRequest, getRequest, getRequestDetail, updateRequest, getBody, listRequests, findDuplicateByRequest } from '../src/background/db.js';
+import { openDB, putRequest, getRequest, getRequestDetail, updateRequest, getBody, listRequests, findDuplicateByRequest, getDetailsByIds } from '../src/background/db.js';
 
 function makeEntry({ respBody = '{"ok":1}', respSize, url = 'https://a.com/api/x' } = {}) {
   const size = respSize ?? (respBody ? respBody.length : 0);
@@ -150,5 +150,16 @@ describe('findDuplicateByRequest', () => {
     const { db } = await seedEntry({ timestamp: 1000, request: { url: 'https://x/api', method: 'GET', headers: [], body: { content: 'abcdef', size: 6, isBinary: false } } });
     const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 1000, bodySize: 99 });
     expect(dup).toBeNull();
+  });
+});
+
+describe('getDetailsByIds', () => {
+  it('returns details for given ids, skipping unknown', async () => {
+    const a = await seedEntry({ request: { url: 'https://x/a', method: 'GET', headers: [], body: { content: '', size: 0, isBinary: false } } });
+    const b = await seedEntry({ request: { url: 'https://x/b', method: 'GET', headers: [], body: { content: '', size: 0, isBinary: false } } });
+    const details = await getDetailsByIds(db, [a.id, b.id, 'no-such-id']);
+    expect(details).toHaveLength(2);
+    expect(details.map((d) => d.url).sort()).toEqual(['https://x/a', 'https://x/b']);
+    expect(details[0].requestBodyIsBinary).toBe(false);
   });
 });
