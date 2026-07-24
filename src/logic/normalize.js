@@ -1,3 +1,13 @@
+/** 把 url 规范化为绝对;base 缺失/非法时尽量解析,失败原样返回 */
+export function normalizeUrl(url, base) {
+  if (!url) return url;
+  try {
+    return new URL(url, base).href;
+  } catch {
+    return url;
+  }
+}
+
 function toHeaders(h) {
   if (!h) return [];
   if (Array.isArray(h)) {
@@ -18,7 +28,7 @@ export function normalizeInjectRecord(raw, ctx) {
     timestamp: raw.timestamp,
     tabId: ctx.tabId, tabUrl: ctx.tabUrl,
     request: {
-      url: raw.request.url,
+      url: normalizeUrl(raw.request.url, ctx.tabUrl),
       method: raw.request.method,
       headers: toHeaders(raw.request.headers),
       body: bodyOf(raw.request.body, raw.request.isBodyBinary),
@@ -43,7 +53,7 @@ export function normalizeDevtoolsRecord(harReq, responseBody, ctx) {
     timestamp: Date.parse(harReq.startedDateTime) || Date.now(),
     tabId: ctx.tabId, tabUrl: ctx.tabUrl,
     request: {
-      url: req.url,
+      url: normalizeUrl(req.url),
       method: req.method,
       headers: toHeaders(req.headers),
       body: bodyOf(req.postData?.text ?? null, false),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeInjectRecord, normalizeDevtoolsRecord } from '../src/logic/normalize.js';
+import { normalizeInjectRecord, normalizeDevtoolsRecord, normalizeUrl } from '../src/logic/normalize.js';
 
 const ctx = { tabId: 5, tabUrl: 'https://a.com/page' };
 
@@ -43,3 +43,47 @@ describe('normalizeDevtoolsRecord', () => {
     expect(e.request.headers[0]).toEqual({ name: 'Accept', value: '*/*' });
   });
 });
+
+describe('normalizeUrl', () => {
+  it('相对 url 用 base 解析为绝对', () => {
+    expect(normalizeUrl('/api/x', 'https://a.com/page')).toBe('https://a.com/api/x');
+  });
+  it('已是绝对则保持绝对(规范化)', () => {
+    expect(normalizeUrl('https://a.com/api/x', 'https://a.com/p')).toBe('https://a.com/api/x');
+  });
+  it('空 url 原样返回', () => {
+    expect(normalizeUrl('', 'https://a.com')).toBe('');
+  });
+  it('base 非法时原样返回 url(不抛)', () => {
+    expect(normalizeUrl('/api/x', 'not-a-url')).toBe('/api/x');
+  });
+});
+
+describe('normalizeInjectRecord · URL 兜底', () => {
+  it('相对 url 用 ctx.tabUrl 兜底解析为绝对', () => {
+    const raw = {
+      source: 'inject', timestamp: 1, duration: 0, resourceType: 'xhr',
+      request: { url: '/api/x', method: 'GET', headers: {}, body: null },
+      response: { status: 200, statusText: 'OK', headers: {}, body: null, mimeType: '', isBodyBinary: false },
+    };
+    const e = normalizeInjectRecord(raw, { tabId: 1, tabUrl: 'https://a.com/page' });
+    expect(e.request.url).toBe('https://a.com/api/x');
+  });
+});
+
+describe('normalizeDevtoolsRecord · 字段断言(M2)', () => {
+  it('完整保留 mimeType/resourceType/duration/statusText', () => {
+    const harReq = {
+      request: { method: 'GET', url: 'https://a.com/d', headers: [], postData: { text: '{}' } },
+      response: { status: 201, statusText: 'Created', headers: [], mimeType: 'application/json' },
+      _resourceType: 'fetch', time: 33, startedDateTime: '2026-07-24T00:00:00.000Z',
+    };
+    const e = normalizeDevtoolsRecord(harReq, '{}', { tabId: 2, tabUrl: '' });
+    expect(e.response.status).toBe(201);
+    expect(e.response.statusText).toBe('Created');
+    expect(e.response.mimeType).toBe('application/json');
+    expect(e.response.resourceType).toBe('fetch');
+    expect(e.duration).toBe(33);
+  });
+});
+
