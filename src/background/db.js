@@ -110,13 +110,20 @@ export async function getRequestDetail(db, id) {
   const record = await req2promise(tx(db, 'requests', 'readonly').get(id));
   if (!record) return null;
   const resolveBody = async (inline, key) => {
-    if (inline != null) return inline;
-    if (key) return getBody(db, key);
-    return null;
+    if (inline != null) return { content: inline, isBinary: false };
+    if (key) {
+      const row = await getBodyRow(db, key);
+      return row ? { content: row.content, isBinary: !!row.isBinary } : { content: null, isBinary: false };
+    }
+    return { content: null, isBinary: false };
   };
-  const requestBody = await resolveBody(record.requestBodyInline, record.requestBodyKey);
-  const responseBody = await resolveBody(record.responseBodyInline, record.responseBodyKey);
-  return { ...record, requestBody, responseBody };
+  const rb = await resolveBody(record.requestBodyInline, record.requestBodyKey);
+  const pb = await resolveBody(record.responseBodyInline, record.responseBodyKey);
+  return {
+    ...record,
+    requestBody: rb.content, requestBodyIsBinary: rb.isBinary,
+    responseBody: pb.content, responseBodyIsBinary: pb.isBinary,
+  };
 }
 
 /** 用 entry 的响应部分回写已存在记录(同 id 覆盖)。用于去重时保留更完整响应(M6)。 */
@@ -151,6 +158,10 @@ export async function getBody(db, bodyKey) {
   const row = await req2promise(tx(db, 'bodies', 'readonly').get(bodyKey));
   if (!row) return null;
   return row.content;
+}
+
+export async function getBodyRow(db, bodyKey) {
+  return req2promise(tx(db, 'bodies', 'readonly').get(bodyKey));
 }
 
 export async function listRequests(db, { page = 1, pageSize = 10 } = {}) {

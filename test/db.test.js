@@ -97,3 +97,24 @@ describe('db', () => {
     expect(ok).toBe(false);
   });
 });
+
+describe('getRequestDetail isBinary', () => {
+  it('reports isBinary=false for inline text body', async () => {
+    const entry = makeEntry();
+    entry.request.body = { content: '{"a":1}', size: 7, isBinary: false };
+    const id = await putRequest(db, entry);
+    const d = await getRequestDetail(db, id);
+    expect(d.requestBody).toBe('{"a":1}');
+    expect(d.requestBodyIsBinary).toBe(false);
+    expect(d.responseBodyIsBinary).toBe(false);
+  });
+  it('reports isBinary=true for split binary body', async () => {
+    const bigBin = 'A'.repeat(70 * 1024);
+    const entry = makeEntry();
+    entry.request = { url: 'https://x/api', method: 'POST', headers: [], body: { content: bigBin, size: bigBin.length, isBinary: true } };
+    const id = await putRequest(db, entry);
+    const d = await getRequestDetail(db, id);
+    expect(d.requestBody).toBe(bigBin);
+    expect(d.requestBodyIsBinary).toBe(true);
+  });
+});
