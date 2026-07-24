@@ -1,5 +1,6 @@
 import { ICONS } from './icons.js';
 import { exportAs } from '../logic/exporters/index.js';
+import { toCurl, hasSensitive } from '../logic/curl.js';
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
@@ -200,6 +201,16 @@ async function openDetail(id) {
   renderHeaders(r);
   renderBody('content-request', r.requestBody);
   renderBody('content-response', r.responseBody);
+  const cc = $('content-curl');
+  if (cc) {
+    cc.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow">
+      <div class="flex justify-between items-center mb-3">
+        <span class="text-[12px] text-surface-400">cURL(默认隐藏敏感头)</span>
+        <button class="modal-copy-curl px-3 py-1 text-[12px] rounded-lg bg-brand-50 text-brand-500 hover:bg-brand-100">${ICONS.copy || ''} 复制</button>
+      </div>
+      <pre class="code-block">${escapeHtml(toCurl(r, { includeSensitive: false }))}</pre>
+    </div>`;
+  }
   $('detailModal').classList.remove('hidden');
   switchTab('headers');
 }
@@ -223,14 +234,45 @@ function renderBody(boxId, content) {
   box.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow"><pre class="code-block">${escapeHtml(pretty)}</pre></div>`;
 }
 function switchTab(tab) {
-  ['headers', 'request', 'response'].forEach((t) => {
+  ['headers', 'request', 'response', 'curl'].forEach((t) => {
     const btn = document.querySelector(`.detail-tab[data-tab="${t}"]`);
     const content = $(`content-${t}`);
+    if (!btn || !content) return;
     if (t === tab) { btn.className = 'detail-tab tab-active'; content.classList.remove('hidden'); }
     else { btn.className = 'detail-tab tab-inactive'; content.classList.add('hidden'); }
   });
 }
 function closeDetail() { $('detailModal').classList.add('hidden'); }
+
+// ---- cURL 复制 ----
+async function copyCurlForId(id) {
+  const res = await send({ type: 'GET_DETAIL', id });
+  const r = res?.record;
+  if (!r) { toast('详情读取失败', 'error'); return; }
+  await copyCurlDetail(r);
+}
+
+async function copyCurlDetail(detail) {
+  const redacted = toCurl(detail, { includeSensitive: false });
+  if (!hasSensitive(detail)) {
+    await writeClip(redacted);
+    toast('已复制 cURL');
+    return;
+  }
+  const ok = confirm('此请求含 Cookie/Authorization 等敏感头,复制完整 cURL 可能泄露凭据。\n\n[确定]=复制完整版  [取消]=复制脱敏版(不含敏感头)');
+  if (ok) {
+    await writeClip(toCurl(detail, { includeSensitive: true }));
+    toast('已复制完整 cURL(含敏感头)');
+  } else {
+    await writeClip(redacted);
+    toast('已复制脱敏 cURL');
+  }
+}
+
+async function writeClip(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { toast('剪贴板写入失败,请重试', 'error'); }
+}
 
 // ---- 全局开关 ----
 async function loadGlobalToggle() {
@@ -292,8 +334,10 @@ $('pageNav').addEventListener('click', (e) => {
   state.page = Number(b.dataset.page); render();
 });
 $('tableBody').addEventListener('click', (e) => {
-  const b = e.target.closest('.detail-open'); if (!b) return;
-  openDetail(b.dataset.id);
+  const curl = e.target.closest('.curl-open');
+  if (curl) { copyCurlForId(curl.dataset.id); return; }
+  const d = e.target.closest('.detail-open');
+  if (d) { openDetail(d.dataset.id); return; }
 });
 $('tableBody').addEventListener('change', (e) => {
   const cb = e.target.closest('.row-check');
@@ -314,6 +358,9 @@ $('refreshBtn').addEventListener('click', async () => { await loadAll(); toast('
 $('globalToggle').addEventListener('click', toggleGlobal);
 $('closeModalBtn').addEventListener('click', closeDetail);
 $('modalBackdrop').addEventListener('click', closeDetail);
+$('detailModal').addEventListener('click', (e) => {
+  if (e.target.closest('.modal-copy-curl') && state.currentDetail) copyCurlDetail(state.currentDetail);
+});
 document.querySelectorAll('.detail-tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
 
