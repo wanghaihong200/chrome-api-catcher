@@ -206,7 +206,7 @@ function closeDetail() { $('detailModal').classList.add('hidden'); }
 // ---- 全局开关 ----
 async function loadGlobalToggle() {
   const got = await chrome.storage.local.get('recording');
-  const r = got.recording || { global: false };
+  const r = got.recording || { global: false, tabs: {} };
   syncGlobalToggle(!!r.global);
 }
 function syncGlobalToggle(on) {
