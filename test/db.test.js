@@ -141,6 +141,11 @@ describe('findDuplicateByRequest', () => {
     const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 4000, bodySize: 0, windowMs: 2000 });
     expect(dup).toBeNull();
   });
+  it('returns null when time diff exactly equals windowMs (>= boundary)', async () => {
+    const { db } = await seedEntry({ timestamp: 1000 });
+    const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 3000, bodySize: 0, windowMs: 2000 });
+    expect(dup).toBeNull();
+  });
   it('returns null when bodySize differs', async () => {
     const { db } = await seedEntry({ timestamp: 1000, request: { url: 'https://x/api', method: 'GET', headers: [], body: { content: 'abcdef', size: 6, isBinary: false } } });
     const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 1000, bodySize: 99 });

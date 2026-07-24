@@ -193,7 +193,6 @@ export async function findDuplicateByRequest(db, { method, url, timestamp, bodyS
   const idx = tx(db, 'requests', 'readonly').index('by-url');
   const records = await req2promise(idx.getAll(IDBKeyRange.only(url)));
   for (const rec of records) {
-    if (!rec) continue;
     if (rec.method !== method) continue;
     if (Math.abs(rec.timestamp - timestamp) >= windowMs) continue;
     if (rec.requestBodySize !== bodySize) continue;
