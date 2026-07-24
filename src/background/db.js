@@ -186,19 +186,18 @@ export async function listRequests(db, { page = 1, pageSize = 10 } = {}) {
 
 /**
  * 在 DB 里按 by-url 索引查同 url 的记录,筛 method + 时间窗 + 请求体大小,返回首个命中 id 或 null。
+ * 用 getAll 单请求取回全部记录后内存筛选,避免跨 await 复用事务被 IDB 自动提交。
  * 去重的真相源(M9 并发竞态 / SW 重启 recent 清空 / M10 by-url 索引利用,一并解决)。
  */
 export async function findDuplicateByRequest(db, { method, url, timestamp, bodySize, windowMs = 2000 }) {
-  const store = tx(db, 'requests', 'readonly');
-  const idx = store.index('by-url');
-  const keys = await req2promise(idx.getAllKeys(IDBKeyRange.only(url)));
-  for (const id of keys) {
-    const rec = await req2promise(store.get(id));
+  const idx = tx(db, 'requests', 'readonly').index('by-url');
+  const records = await req2promise(idx.getAll(IDBKeyRange.only(url)));
+  for (const rec of records) {
     if (!rec) continue;
     if (rec.method !== method) continue;
     if (Math.abs(rec.timestamp - timestamp) >= windowMs) continue;
     if (rec.requestBodySize !== bodySize) continue;
-    return id;
+    return rec.id;
   }
   return null;
 }
