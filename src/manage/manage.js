@@ -1,0 +1,265 @@
+import { ICONS } from './icons.js';
+
+const $ = (id) => document.getElementById(id);
+const send = (msg) => chrome.runtime.sendMessage(msg);
+
+const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null };
+
+// ---- 注入图标 ----
+$('logoIcon').innerHTML = ICONS.logo;
+$('searchIcon').innerHTML = ICONS.search;
+$('refreshIcon').innerHTML = ICONS.refresh;
+$('closeModalBtn').innerHTML = ICONS.xmark;
+$('stat1Icon').innerHTML = ICONS.plug;
+$('stat2Icon').innerHTML = ICONS.plus;
+$('stat3Icon').innerHTML = ICONS.warning;
+$('stat4Icon').innerHTML = ICONS.clock;
+
+// ---- 工具 ----
+function statusClass(s) {
+  if (s >= 200 && s < 300) return '2xx';
+  if (s >= 300 && s < 400) return '3xx';
+  if (s >= 400 && s < 500) return '4xx';
+  if (s >= 500) return '5xx';
+  return '2xx';
+}
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function formatTime(ts) {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function timeClass(ms) {
+  if (ms < 100) return 'fast';
+  if (ms <= 500) return 'normal';
+  return 'slow';
+}
+function timeRangeMs(v) {
+  return { '1h': 3600e3, '6h': 6 * 3600e3, '24h': 24 * 3600e3, '7d': 7 * 24 * 3600e3 }[v] || 0;
+}
+function toast(msg, type = 'success') {
+  const color = type === 'error' ? 'bg-red-500' : type === 'info' ? 'bg-brand-500' : 'bg-emerald-500';
+  const el = document.createElement('div');
+  el.className = `toast-in flex items-center gap-3 px-5 py-3.5 ${color} text-white rounded-[12px] text-[13px] font-medium min-w-[200px]`;
+  el.textContent = msg;
+  $('toastContainer').appendChild(el);
+  setTimeout(() => { el.classList.remove('toast-in'); el.classList.add('toast-out'); setTimeout(() => el.remove(), 300); }, 2000);
+}
+
+// ---- 过滤 ----
+function applyFilters() {
+  const q = $('searchInput').value.trim().toLowerCase();
+  const m = $('methodFilter').value;
+  const st = $('statusFilter').value;
+  const tf = $('timeFilter').value;
+  const rt = $('responseTimeFilter').value;
+  const now = Date.now();
+  const rangeMs = timeRangeMs(tf);
+  state.filtered = state.all.filter((r) => {
+    if (q && !(`${r.url} ${r.method} ${r.status}`.toLowerCase().includes(q))) return false;
+    if (m && r.method !== m) return false;
+    if (st && statusClass(r.status) !== st) return false;
+    if (rangeMs && now - r.timestamp > rangeMs) return false;
+    if (rt === 'fast' && !(r.duration < 100)) return false;
+    if (rt === 'normal' && !(r.duration >= 100 && r.duration <= 500)) return false;
+    if (rt === 'slow' && !(r.duration > 500)) return false;
+    return true;
+  });
+  state.page = 1;
+  render();
+}
+
+// ---- 渲染 ----
+function render() {
+  renderTable();
+  renderPagination();
+  renderActiveFilters();
+}
+
+function renderStats() {
+  const all = state.all;
+  const total = all.length;
+  const err = all.filter((r) => r.status >= 400).length;
+  const now = Date.now();
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const today = all.filter((r) => r.timestamp >= today0.getTime()).length;
+  const last24 = all.filter((r) => now - r.timestamp <= 24 * 3600e3).length;
+  const durs = all.map((r) => r.duration || 0);
+  const avg = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : 0;
+  const max = durs.length ? Math.max(...durs) : 0;
+  $('statTotal').textContent = total.toLocaleString();
+  $('statTotalSub').textContent = `异常 ${err} 条`;
+  $('statToday').textContent = today;
+  $('statTodaySub').textContent = `最近 24h:${last24} 条`;
+  $('statError').textContent = err;
+  $('statErrorSub').textContent = total ? `占比 ${(100 * err / total).toFixed(1)}%` : '占比 0%';
+  $('statAvgTime').textContent = avg;
+  $('statAvgSub').textContent = `最慢 ${max}ms`;
+}
+
+function renderTable() {
+  const tbody = $('tableBody');
+  const { filtered, page, pageSize } = state;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  if (page > pageCount) state.page = pageCount;
+  const start = (state.page - 1) * pageSize;
+  const slice = filtered.slice(start, start + pageSize);
+  tbody.innerHTML = slice.map((r) => `
+    <tr class="table-row-hover border-b border-surface-50" data-id="${r.id}">
+      <td class="px-5 py-4"><span class="method-badge method-${r.method}">${r.method}</span></td>
+      <td class="px-4 py-4"><div class="text-[13px] text-surface-500 font-mono truncate max-w-[320px]" title="${escapeHtml(r.url)}">${escapeHtml(r.url)}</div></td>
+      <td class="px-4 py-4"><span class="status-badge status-${statusClass(r.status)}"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:currentColor"></span>${r.status}</span></td>
+      <td class="px-4 py-4"><div class="time-indicator"><span class="time-dot time-${timeClass(r.duration)}"></span><span class="text-[13px] text-surface-600 font-mono">${r.duration || 0}ms</span></div></td>
+      <td class="px-4 py-4"><span class="text-[12px] text-surface-400">${formatTime(r.timestamp)}</span></td>
+      <td class="px-5 py-4 text-right"><button class="detail-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}">${ICONS.eye}</button></td>
+    </tr>`).join('');
+  $('emptyState').classList.toggle('hidden', filtered.length > 0);
+  const from = filtered.length ? start + 1 : 0;
+  $('showingInfo').textContent = `显示 ${from}-${start + slice.length} 条,共 ${filtered.length} 条`;
+}
+
+function renderPagination() {
+  const pageCount = Math.max(1, Math.ceil(state.filtered.length / state.pageSize));
+  const cur = state.page;
+  const btn = (label, page, opts = {}) =>
+    `<button class="page-btn ${opts.active ? 'active' : 'text-surface-600'}" ${opts.disabled ? 'disabled' : `data-page="${page}"`}>${label}</button>`;
+  const nav = [];
+  nav.push(btn('‹', cur - 1, { disabled: cur <= 1 }));
+  for (let i = 1; i <= pageCount; i++) {
+    if (i === 1 || i === pageCount || Math.abs(i - cur) <= 1) {
+      nav.push(btn(i, i, { active: i === cur }));
+    } else if (Math.abs(i - cur) === 2) {
+      nav.push(`<span class="text-surface-300 px-1">…</span>`);
+    }
+  }
+  nav.push(btn('›', cur + 1, { disabled: cur >= pageCount }));
+  $('pageNav').innerHTML = nav.join('');
+}
+
+function renderActiveFilters() {
+  const active = [];
+  const q = $('searchInput').value.trim(); if (q) active.push(`搜索:${q}`);
+  if ($('methodFilter').value) active.push(`方法:${$('methodFilter').value}`);
+  if ($('statusFilter').value) active.push(`状态:${$('statusFilter').value}`);
+  if ($('timeFilter').value) active.push(`时间:${$('timeFilter').selectedOptions[0].textContent}`);
+  if ($('responseTimeFilter').value) active.push(`响应:${$('responseTimeFilter').selectedOptions[0].textContent}`);
+  const box = $('activeFilters');
+  const clearBtn = $('clearFiltersBtn');
+  if (active.length) {
+    box.classList.remove('hidden');
+    clearBtn.classList.remove('hidden');
+    box.innerHTML = '<span class="text-[12px] text-surface-400">已选筛选:</span>' +
+      active.map((a) => `<span class="filter-chip">${escapeHtml(a)}</span>`).join('');
+  } else {
+    box.classList.add('hidden');
+    clearBtn.classList.add('hidden');
+  }
+}
+
+// ---- 详情 Modal ----
+async function openDetail(id) {
+  const res = await send({ type: 'GET_DETAIL', id });
+  const r = res?.record;
+  if (!r) { toast('详情读取失败', 'error'); return; }
+  state.currentDetail = r;
+  $('modalMethod').className = `method-badge method-${r.method}`;
+  $('modalMethod').textContent = r.method;
+  $('modalUrl').textContent = r.url;
+  $('modalMeta').textContent = `${r.status} ${r.statusText || ''} · ${r.duration || 0}ms · ${formatTime(r.timestamp)} · ${r.source}`;
+  renderHeaders(r);
+  renderBody('content-request', r.requestBody);
+  renderBody('content-response', r.responseBody);
+  $('detailModal').classList.remove('hidden');
+  switchTab('headers');
+}
+function renderHeaders(r) {
+  const block = (title, headers, accent) => `
+    <div class="bg-white rounded-[12px] p-5 card-shadow">
+      <h4 class="text-[13px] font-semibold text-surface-700 mb-3">${title}</h4>
+      <div class="space-y-1.5">${(headers || []).map((h) => `
+        <div class="flex items-start gap-4 py-1.5 border-b border-surface-50 last:border-0">
+          <span class="text-[12px] font-mono ${accent} min-w-[160px] shrink-0">${escapeHtml(h.name)}</span>
+          <span class="text-[12px] font-mono text-surface-600 break-all">${escapeHtml(h.value)}</span>
+        </div>`).join('') || '<p class="text-[12px] text-surface-400">无</p>'}</div>
+    </div>`;
+  $('content-headers').innerHTML = block('Request Headers', r.requestHeaders, 'text-brand-500') + block('Response Headers', r.responseHeaders, 'text-success');
+}
+function renderBody(boxId, content) {
+  const box = $(boxId);
+  if (content == null || content === '') { box.innerHTML = '<div class="bg-white rounded-[12px] p-5 card-shadow text-[12px] text-surface-400">无内容</div>'; return; }
+  let pretty = content;
+  try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch { /* 非 JSON 原样 */ }
+  box.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow"><pre class="code-block">${escapeHtml(pretty)}</pre></div>`;
+}
+function switchTab(tab) {
+  ['headers', 'request', 'response'].forEach((t) => {
+    const btn = document.querySelector(`.detail-tab[data-tab="${t}"]`);
+    const content = $(`content-${t}`);
+    if (t === tab) { btn.className = 'detail-tab tab-active'; content.classList.remove('hidden'); }
+    else { btn.className = 'detail-tab tab-inactive'; content.classList.add('hidden'); }
+  });
+}
+function closeDetail() { $('detailModal').classList.add('hidden'); }
+
+// ---- 全局开关 ----
+async function loadGlobalToggle() {
+  const got = await chrome.storage.local.get('recording');
+  const r = got.recording || { global: false };
+  syncGlobalToggle(!!r.global);
+}
+function syncGlobalToggle(on) {
+  const t = $('globalToggle');
+  t.classList.toggle('active', on);
+  $('liveDot').classList.toggle('hidden', on);
+  $('liveIndicator').classList.toggle('hidden', !on);
+}
+async function toggleGlobal() {
+  const got = await chrome.storage.local.get('recording');
+  const r = got.recording || { global: false, tabs: {} };
+  r.global = !r.global;
+  await chrome.storage.local.set({ recording: r });
+  syncGlobalToggle(r.global);
+  send({ type: 'SET_GLOBAL', value: r.global }).catch(() => {});
+  toast(r.global ? '全局录制已开启' : '全局录制已关闭', 'info');
+}
+
+// ---- 数据加载 ----
+async function loadAll() {
+  const res = await send({ type: 'GET_ALL' });
+  state.all = (res?.items || []).slice().sort((a, b) => b.timestamp - a.timestamp);
+  renderStats();
+  applyFilters();
+}
+
+// ---- 事件绑定 ----
+$('searchInput').addEventListener('input', applyFilters);
+['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => $(id).addEventListener('change', applyFilters));
+$('pageSize').addEventListener('change', (e) => { state.pageSize = Number(e.target.value); state.page = 1; render(); });
+$('pageNav').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-page]'); if (!b) return;
+  state.page = Number(b.dataset.page); render();
+});
+$('tableBody').addEventListener('click', (e) => {
+  const b = e.target.closest('.detail-open'); if (!b) return;
+  openDetail(b.dataset.id);
+});
+$('clearFiltersBtn').addEventListener('click', () => {
+  $('searchInput').value = '';
+  ['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => ($(id).value = ''));
+  applyFilters();
+});
+$('refreshBtn').addEventListener('click', async () => { await loadAll(); toast('已刷新'); });
+$('globalToggle').addEventListener('click', toggleGlobal);
+$('closeModalBtn').addEventListener('click', closeDetail);
+$('modalBackdrop').addEventListener('click', closeDetail);
+document.querySelectorAll('.detail-tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
+
+// ---- 启动 ----
+loadGlobalToggle();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.recording) syncGlobalToggle(!!changes.recording.newValue?.global);
+});
+loadAll();
