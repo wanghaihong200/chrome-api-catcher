@@ -2,6 +2,12 @@
   const TAG = '__apiCatcher';
   const send = (payload) => window.postMessage({ TAG, ...payload }, '*');
 
+  // 相对 URL → 绝对(用页面真实 location,iframe 场景也准)。与 normalize.js 的 normalizeUrl 等价。
+  function absUrl(url, base) {
+    if (!url) return url;
+    try { return new URL(url, base || location.href).href; } catch { return url; }
+  }
+
   function headersToObject(h) {
     if (!h) return {};
     const out = {};
@@ -65,7 +71,7 @@
   const OrigSetHeader = XMLHttpRequest.prototype.setRequestHeader;
 
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__ac = { method: (method || 'GET').toUpperCase(), url: String(url), headers: {}, t0: performance.now() };
+    this.__ac = { method: (method || 'GET').toUpperCase(), url: absUrl(String(url)), headers: {}, t0: performance.now() };
     return OrigOpen.apply(this, arguments);
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
