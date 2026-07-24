@@ -8,6 +8,34 @@
     try { return new URL(url, base || location.href).href; } catch { return url; }
   }
 
+  // ---- 内联 base64 工具(MAIN world 无法 import 扩展模块) ----
+  function bytesToBase64(input) {
+    let bytes;
+    if (input instanceof ArrayBuffer) bytes = new Uint8Array(input);
+    else if (ArrayBuffer.isView(input)) bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    else return '';
+    let binary = '';
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    return btoa(binary);
+  }
+  const BINARY_RESP_RE = /^(image\/|application\/octet-stream|font\/|video\/|audio\/)/i;
+  function isBinaryResp(mimeType) { return BINARY_RESP_RE.test(mimeType || ''); }
+
+  async function encodeBody(body) {
+    if (body == null || typeof body === 'string') return { body: body ?? null, isBinary: false };
+    if (body instanceof URLSearchParams) return { body: body.toString(), isBinary: false };
+    try {
+      let buf;
+      if (body instanceof ArrayBuffer) buf = body;
+      else if (ArrayBuffer.isView(body)) buf = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+      else if (body instanceof Blob) buf = await body.arrayBuffer();
+      else if (body instanceof FormData) buf = await new Response(body).arrayBuffer();
+      else return { body: null, isBinary: false };
+      return { body: bytesToBase64(buf), isBinary: true };
+    } catch { return { body: null, isBinary: false }; }
+  }
+
   function headersToObject(h) {
     if (!h) return {};
     const out = {};
@@ -33,8 +61,8 @@
       headers = headersToObject(init?.headers);
       body = init?.body ?? null;
     }
-    const isBodyBinary = body && !(typeof body === 'string');
-    const bodyText = typeof body === 'string' ? body : null;
+    let enc;
+    try { enc = await encodeBody(body); } catch { enc = { body: null, isBinary: false }; }
 
     let response;
     try {
@@ -49,18 +77,28 @@
       const respHeaders = headersToObject(response.headers);
       const mimeType = response.headers.get('content-type') || '';
       // detached: 不阻塞返回,流式响应不被破坏
-      response.clone().text()
-        .then((text) => {
-          send({
-            source: 'inject',
-            timestamp: Date.now(),
-            duration: Math.round(performance.now() - t0),
-            resourceType: 'fetch',
-            request: { url, method, headers, body: bodyText, isBodyBinary: !!isBodyBinary },
+      const basePayload = {
+        source: 'inject',
+        timestamp: Date.now(),
+        duration: Math.round(performance.now() - t0),
+        resourceType: 'fetch',
+        request: { url, method, headers, body: enc.body, isBodyBinary: enc.isBinary },
+      };
+      if (isBinaryResp(mimeType)) {
+        response.clone().arrayBuffer()
+          .then((buf) => send({
+            ...basePayload,
+            response: { status, statusText, headers: respHeaders, body: bytesToBase64(buf), mimeType, isBodyBinary: true },
+          }))
+          .catch(() => {});
+      } else {
+        response.clone().text()
+          .then((text) => send({
+            ...basePayload,
             response: { status, statusText, headers: respHeaders, body: text, mimeType, isBodyBinary: false },
-          });
-        })
-        .catch(() => { /* 读取响应体失败则忽略,不影响页面 */ });
+          }))
+          .catch(() => {});
+      }
     }
     return response;
   };
@@ -81,11 +119,9 @@
   XMLHttpRequest.prototype.send = function (body) {
     const meta = this.__ac;
     if (meta) {
-      const isBodyBinary = body && !(typeof body === 'string');
-      meta.body = typeof body === 'string' ? body : null;
-      meta.isBodyBinary = !!isBodyBinary;
-      this.addEventListener('loadend', () => {
+      this.addEventListener('loadend', async () => {
         try {
+          const enc = await encodeBody(body);
           let text = null;
           try { text = this.responseText; } catch { /* 某些类型无 responseText */ }
           send({
@@ -93,7 +129,7 @@
             timestamp: Date.now(),
             duration: Math.round(performance.now() - meta.t0),
             resourceType: 'xhr',
-            request: { url: meta.url, method: meta.method, headers: meta.headers, body: meta.body, isBodyBinary: meta.isBodyBinary },
+            request: { url: meta.url, method: meta.method, headers: meta.headers, body: enc.body, isBodyBinary: enc.isBinary },
             response: {
               status: this.status, statusText: this.statusText,
               headers: parseRawHeaders(this.getAllResponseHeaders()),
