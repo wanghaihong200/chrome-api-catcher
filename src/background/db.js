@@ -105,6 +105,48 @@ export async function getRequest(db, id) {
   return req2promise(tx(db, 'requests', 'readonly').get(id));
 }
 
+/** 读取单条并合并 body(内联优先,否则从 bodies 表懒加载)。用于详情。 */
+export async function getRequestDetail(db, id) {
+  const record = await req2promise(tx(db, 'requests', 'readonly').get(id));
+  if (!record) return null;
+  const resolveBody = async (inline, key) => {
+    if (inline != null) return inline;
+    if (key) return getBody(db, key);
+    return null;
+  };
+  const requestBody = await resolveBody(record.requestBodyInline, record.requestBodyKey);
+  const responseBody = await resolveBody(record.responseBodyInline, record.responseBodyKey);
+  return { ...record, requestBody, responseBody };
+}
+
+/** 用 entry 的响应部分回写已存在记录(同 id 覆盖)。用于去重时保留更完整响应(M6)。 */
+export async function updateRequest(db, id, entry) {
+  const existing = await req2promise(tx(db, 'requests', 'readonly').get(id));
+  if (!existing) return false;
+  const respBody = planBody(entry.response.body);
+  const t = db.transaction(['requests', 'bodies'], 'readwrite');
+  const updated = {
+    ...existing,
+    status: entry.response.status,
+    statusText: entry.response.statusText,
+    responseHeaders: entry.response.headers,
+    responseBodyKey: respBody.key,
+    responseBodyInline: respBody.inline,
+    responseBodySize: entry.response.body.size,
+    hasResponseBody: entry.response.body.content != null,
+    responseMimeType: entry.response.mimeType,
+    duration: entry.duration || existing.duration,
+  };
+  t.objectStore('requests').put(updated);
+  if (respBody.needStore) t.objectStore('bodies').put(respBody.needStore);
+  await new Promise((resolve, reject) => {
+    t.oncomplete = resolve;
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+  return true;
+}
+
 export async function getBody(db, bodyKey) {
   const row = await req2promise(tx(db, 'bodies', 'readonly').get(bodyKey));
   if (!row) return null;
