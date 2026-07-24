@@ -183,3 +183,22 @@ export async function listRequests(db, { page = 1, pageSize = 10 } = {}) {
     open.onerror = () => reject(open.error);
   });
 }
+
+/**
+ * 在 DB 里按 by-url 索引查同 url 的记录,筛 method + 时间窗 + 请求体大小,返回首个命中 id 或 null。
+ * 去重的真相源(M9 并发竞态 / SW 重启 recent 清空 / M10 by-url 索引利用,一并解决)。
+ */
+export async function findDuplicateByRequest(db, { method, url, timestamp, bodySize, windowMs = 2000 }) {
+  const store = tx(db, 'requests', 'readonly');
+  const idx = store.index('by-url');
+  const keys = await req2promise(idx.getAllKeys(IDBKeyRange.only(url)));
+  for (const id of keys) {
+    const rec = await req2promise(store.get(id));
+    if (!rec) continue;
+    if (rec.method !== method) continue;
+    if (Math.abs(rec.timestamp - timestamp) >= windowMs) continue;
+    if (rec.requestBodySize !== bodySize) continue;
+    return id;
+  }
+  return null;
+}

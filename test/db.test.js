@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
-import { openDB, putRequest, getRequest, getRequestDetail, updateRequest, getBody, listRequests } from '../src/background/db.js';
+import { openDB, putRequest, getRequest, getRequestDetail, updateRequest, getBody, listRequests, findDuplicateByRequest } from '../src/background/db.js';
 
 function makeEntry({ respBody = '{"ok":1}', respSize, url = 'https://a.com/api/x' } = {}) {
   const size = respSize ?? (respBody ? respBody.length : 0);
@@ -25,6 +25,12 @@ beforeEach(async () => {
     t.onabort = () => reject(t.error);
   });
 });
+
+async function seedEntry(overrides = {}) {
+  const entry = { ...makeEntry({ url: 'https://x/api' }), ...overrides };
+  const id = await putRequest(db, entry);
+  return { db, id, entry };
+}
 
 describe('db', () => {
   it('小响应体内联,无 bodyKey', async () => {
@@ -116,5 +122,28 @@ describe('getRequestDetail isBinary', () => {
     const d = await getRequestDetail(db, id);
     expect(d.requestBody).toBe(bigBin);
     expect(d.requestBodyIsBinary).toBe(true);
+  });
+});
+
+describe('findDuplicateByRequest', () => {
+  it('finds same method+url+bodySize within window', async () => {
+    const { db, id } = await seedEntry({ timestamp: 1000 });
+    const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 1500, bodySize: 0 });
+    expect(dup).toBe(id);
+  });
+  it('returns null when method differs', async () => {
+    const { db } = await seedEntry({ timestamp: 1000, request: { url: 'https://x/api', method: 'POST', headers: [], body: { content: '', size: 0, isBinary: false } } });
+    const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 1000, bodySize: 0 });
+    expect(dup).toBeNull();
+  });
+  it('returns null outside time window', async () => {
+    const { db } = await seedEntry({ timestamp: 1000 });
+    const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 4000, bodySize: 0, windowMs: 2000 });
+    expect(dup).toBeNull();
+  });
+  it('returns null when bodySize differs', async () => {
+    const { db } = await seedEntry({ timestamp: 1000, request: { url: 'https://x/api', method: 'GET', headers: [], body: { content: 'abcdef', size: 6, isBinary: false } } });
+    const dup = await findDuplicateByRequest(db, { method: 'GET', url: 'https://x/api', timestamp: 1000, bodySize: 99 });
+    expect(dup).toBeNull();
   });
 });
