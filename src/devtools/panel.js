@@ -1,40 +1,45 @@
-const btn = document.getElementById('toggle');
+const toggle = document.getElementById('tabToggle');
 const status = document.getElementById('status');
-let recording = false;
+const globalHint = document.getElementById('globalHint');
 const tabId = chrome.devtools.inspectedWindow.tabId;
-let tabUrl = '';
 
-chrome.devtools.inspectedWindow.eval('location.href', (result) => { tabUrl = result || ''; });
-
-function render() {
-  btn.textContent = recording ? '录制:ON' : '录制:OFF';
-  status.textContent = recording ? '正在抓取本标签页请求' : '默认关闭,点击开启';
+async function getState() {
+  const got = await chrome.storage.local.get('recording');
+  return got.recording || { global: false, tabs: {} };
 }
 
-btn.addEventListener('click', async () => {
-  recording = !recording;
-  try {
-    const resp = await chrome.runtime.sendMessage({ type: 'SET_RECORDING', value: recording });
-    recording = !!resp?.recording;
-  } catch {
-    recording = false; // 出错时回退到关闭
-  }
+async function render() {
+  const rec = await getState();
+  const on = rec.tabs[tabId] === true;
+  toggle.classList.toggle('active', on);
+  status.textContent = on ? '正在抓取本标签页请求' : '默认关闭,点击开启';
+  globalHint.hidden = !!rec.global;
+}
+
+toggle.addEventListener('click', async () => {
+  const rec = await getState();
+  rec.tabs = rec.tabs || {};
+  rec.tabs[tabId] = !(rec.tabs[tabId] === true);
+  await chrome.storage.local.set({ recording: rec });
+  chrome.runtime.sendMessage({ type: 'SET_TAB', tabId, value: rec.tabs[tabId] }).catch(() => {});
   render();
 });
 
+chrome.storage.onChanged.addListener((_c, area) => { if (area === 'local') render(); });
+
+// 仅在「本标签页开关开」时上报(全局判定由 background.ingest 的 shouldRecord 完成)
 chrome.devtools.network.onRequestFinished.addListener((req) => {
-  if (!recording) return;
-  req.getContent((responseBody) => {
-    try {
-      chrome.runtime.sendMessage({
-        type: 'RECORD_DEVTOOLS',
-        har: req,
-        responseBody,
-        tabId,
-        tabUrl,
-      }).catch(() => {});
-    } catch { /* 忽略 */ }
-  });
+  (async () => {
+    const rec = await getState();
+    if (rec.tabs[tabId] !== true) return;
+    chrome.devtools.inspectedWindow.eval('location.href', (tabUrl) => {
+      req.getContent((responseBody) => {
+        chrome.runtime.sendMessage({
+          type: 'RECORD_DEVTOOLS', har: req, responseBody, tabId, tabUrl: tabUrl || '',
+        }).catch(() => {});
+      });
+    });
+  })();
 });
 
 render();
