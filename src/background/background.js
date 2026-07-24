@@ -1,16 +1,13 @@
-import { openDB, putRequest, getRequestDetail, getRequest, listRequests, updateRequest } from './db.js';
+import { openDB, putRequest, getRequestDetail, getRequest, listRequests, updateRequest, findDuplicateByRequest, getDetailsByIds } from './db.js';
 import { shouldKeep } from '../logic/filter.js';
-import { makeKey, findDuplicate, pickMoreComplete } from './dedupe.js';
 import { normalizeInjectRecord, normalizeDevtoolsRecord } from '../logic/normalize.js';
 import { shouldRecord, DEFAULT_RECORDING_STATE } from '../logic/recording.js';
 
 const STORAGE_KEY = 'recording';
-const RECENT_MAX = 200;
 const ALL_PAGE_SIZE = 5000; // GET_ALL 一次返回上限(方案 A 前端持数据)
 
 const state = {
   recording: { ...DEFAULT_RECORDING_STATE, tabs: {} }, // 内存镜像,storage 为真相源
-  recent: [], // [{key, timestamp, id}]
   dbPromise: null,
 };
 
@@ -44,36 +41,36 @@ async function persistRecording() {
   } catch { /* 忽略 */ }
 }
 
-function pushRecent(entry, id) {
-  state.recent.unshift({ key: makeKey(entry), timestamp: entry.timestamp, id });
-  if (state.recent.length > RECENT_MAX) state.recent.length = RECENT_MAX;
+function notify(msg) {
+  try { chrome.runtime.sendMessage(msg).catch(() => { /* 无监听者时忽略 */ }); } catch { /* SW 间回环等忽略 */ }
 }
 
 async function ingest(entry) {
-  if (!shouldRecord(state.recording, entry.tabId)) return; // 开关未开则丢弃
+  if (!shouldRecord(state.recording, entry.tabId)) return;
   if (!shouldKeep({ url: entry.request.url, resourceType: entry.response.resourceType, responseMimeType: entry.response.mimeType })) {
     return;
   }
-  const dup = findDuplicate(entry, state.recent);
-  if (dup) {
-    // 去重命中:若新条响应更完整则回写(M6);否则先到先得
+  const dupId = await findDuplicateByRequest(await db(), {
+    method: entry.request.method,
+    url: entry.request.url,
+    timestamp: entry.timestamp,
+    bodySize: entry.request.body.size,
+  });
+  if (dupId) {
     try {
-      const existing = await getRequest(await db(), dup.id);
+      const existing = await getRequest(await db(), dupId);
       if (existing) {
-        const winner = pickMoreComplete(
-          { response: { body: { size: entry.response.body.size } } },
-          { response: { body: { size: existing.responseBodySize } } },
-        );
         const entrySize = entry.response.body.size;
-        // pickMoreComplete 返回 size 更大者(相等返回第一个参数);仅在「新条严格更大」时回写
-        const newIsStrictlyBetter = winner.response.body.size === entrySize && entrySize > existing.responseBodySize;
-        if (newIsStrictlyBetter) await updateRequest(await db(), dup.id, entry);
+        if (entrySize > existing.responseBodySize) {
+          await updateRequest(await db(), dupId, entry);
+          notify({ type: 'REQUEST_UPDATED', id: dupId });
+        }
       }
     } catch { /* 回写失败不影响主流程 */ }
     return;
   }
   const id = await putRequest(await db(), entry);
-  pushRecent(entry, id);
+  notify({ type: 'NEW_REQUEST', id });
 }
 
 function getTabContext(tabId) {
@@ -139,6 +136,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         case 'GET_DETAIL': {
           const record = await getRequestDetail(await db(), msg.id);
           sendResponse({ record });
+          break;
+        }
+        case 'GET_DETAILS_BY_IDS': {
+          const details = await getDetailsByIds(await db(), msg.ids || []);
+          sendResponse({ details });
           break;
         }
         default:
