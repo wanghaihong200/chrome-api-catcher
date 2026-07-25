@@ -160,6 +160,7 @@ export async function getBody(db, bodyKey) {
   return row.content;
 }
 
+/** 读取 bodies 表整行(含 content/isBinary/size)。供 getRequestDetail 合并 body 时判断 isBinary。 */
 export async function getBodyRow(db, bodyKey) {
   return req2promise(tx(db, 'bodies', 'readonly').get(bodyKey));
 }

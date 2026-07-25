@@ -30,6 +30,7 @@ describe('curl', () => {
   it('hasSensitive detects cookie/auth', () => {
     expect(hasSensitive({ requestHeaders: [{ name: 'Cookie', value: 'x' }], responseHeaders: [] })).toBe(true);
     expect(hasSensitive({ requestHeaders: [{ name: 'X', value: 'y' }], responseHeaders: [] })).toBe(false);
+    expect(hasSensitive({ requestHeaders: [], responseHeaders: [{ name: 'Set-Cookie', value: 'a=b' }] })).toBe(true);
   });
   it('includeSensitive=false hides sensitive headers + notes count', () => {
     const d = { ...base, requestHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Authorization', value: 'Bearer s' }] };

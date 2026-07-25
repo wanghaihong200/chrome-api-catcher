@@ -17,10 +17,17 @@ describe('har exporter', () => {
     const har = JSON.parse(exportAs('har', [fixture]));
     expect(har.log.version).toBe('1.2');
     expect(har.log.entries[0].request.method).toBe('POST');
+    expect(har.log.entries[0].request.queryString).toEqual([{ name: 'q', value: '1' }]);
   });
   it('sets encoding=base64 for binary response', () => {
     const har = JSON.parse(exportAs('har', [{ ...fixture, responseBodyIsBinary: true }]));
     expect(har.log.entries[0].response.content.encoding).toBe('base64');
+  });
+  it('handles empty/null input without crashing', () => {
+    expect(() => exportAs('har', [])).not.toThrow();
+    expect(() => exportAs('har', null)).not.toThrow();
+    const empty = JSON.parse(exportAs('har', []));
+    expect(empty.log.entries).toEqual([]);
   });
 });
 

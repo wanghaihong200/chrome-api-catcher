@@ -122,6 +122,7 @@ describe('getRequestDetail isBinary', () => {
     const d = await getRequestDetail(db, id);
     expect(d.requestBody).toBe(bigBin);
     expect(d.requestBodyIsBinary).toBe(true);
+    expect(d.responseBodyIsBinary).toBe(false);
   });
 });
 
