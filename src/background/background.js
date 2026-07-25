@@ -61,8 +61,11 @@ async function ingest(entry) {
       const existing = await getRequest(await db(), dupId);
       if (existing) {
         const entrySize = entry.response.body.size;
-        if (entrySize > existing.responseBodySize) {
-          await updateRequest(await db(), dupId, entry);
+        const respBetter = entrySize > existing.responseBodySize;
+        // 请求头完整性:新条 headers 更多(devtools 路径含 Cookie 等浏览器自动加的头)则合并
+        const reqBetter = (entry.request.headers.length || 0) > (existing.requestHeaders?.length || 0);
+        if (respBetter || reqBetter) {
+          await updateRequest(await db(), dupId, entry, { updateReqHeaders: reqBetter });
           notify({ type: 'REQUEST_UPDATED', id: dupId });
         }
       }

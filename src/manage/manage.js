@@ -122,6 +122,7 @@ function renderTable() {
       <td class="px-4 py-4"><span class="status-badge status-${statusClass(r.status)}"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:currentColor"></span>${r.status}</span></td>
       <td class="px-4 py-4"><div class="time-indicator"><span class="time-dot time-${timeClass(r.duration)}"></span><span class="text-[13px] text-surface-600 font-mono">${r.duration || 0}ms</span></div></td>
       <td class="px-4 py-4"><span class="text-[12px] text-surface-400">${formatTime(r.timestamp)}</span></td>
+      <td class="px-4 py-4"><span class="text-[12px] ${r.source === 'devtools' ? 'text-brand-500 font-medium' : 'text-surface-400'}">${r.source || '-'}</span></td>
       <td class="px-5 py-4 text-right whitespace-nowrap">
         <button class="curl-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}" title="复制 cURL">${ICONS.copy || ''}</button>
         <button class="detail-open w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-brand-500 hover:bg-brand-50 transition-all" data-id="${r.id}" title="详情">${ICONS.eye}</button>

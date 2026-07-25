@@ -102,6 +102,18 @@ describe('db', () => {
     const ok = await updateRequest(db, 'nope', makeEntry());
     expect(ok).toBe(false);
   });
+  it('updateRequest updateReqHeaders 合并请求头(devtools Cookie 进 inject 版)', async () => {
+    const id = await putRequest(db, makeEntry()); // inject 版 requestHeaders 为 []
+    expect((await getRequest(db, id)).requestHeaders).toEqual([]);
+    const newer = makeEntry();
+    newer.request.headers = [{ name: 'content-type', value: 'application/json' }, { name: 'Cookie', value: 'session=abc' }];
+    newer.source = 'devtools';
+    await updateRequest(db, id, newer, { updateReqHeaders: true });
+    const after = await getRequest(db, id);
+    expect(after.requestHeaders).toHaveLength(2);
+    expect(after.requestHeaders.some((h) => h.name === 'Cookie')).toBe(true);
+    expect(after.source).toBe('devtools');
+  });
 });
 
 describe('getRequestDetail isBinary', () => {

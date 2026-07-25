@@ -126,8 +126,9 @@ export async function getRequestDetail(db, id) {
   };
 }
 
-/** 用 entry 的响应部分回写已存在记录(同 id 覆盖)。用于去重时保留更完整响应(M6)。 */
-export async function updateRequest(db, id, entry) {
+/** 用 entry 的响应部分回写已存在记录(同 id 覆盖)。用于去重时保留更完整响应(M6)。
+ *  opts.updateReqHeaders=true 时同时回写请求头(让 devtools 路径的 Cookie 等浏览器自动加的完整头合并进先到的 inject 版本)。*/
+export async function updateRequest(db, id, entry, opts = {}) {
   const existing = await req2promise(tx(db, 'requests', 'readonly').get(id));
   if (!existing) return false;
   const respBody = planBody(entry.response.body);
@@ -143,6 +144,7 @@ export async function updateRequest(db, id, entry) {
     hasResponseBody: entry.response.body.content != null,
     responseMimeType: entry.response.mimeType,
     duration: entry.duration || existing.duration,
+    ...(opts.updateReqHeaders ? { requestHeaders: entry.request.headers, source: entry.source, tabUrl: entry.tabUrl } : {}),
   };
   t.objectStore('requests').put(updated);
   if (respBody.needStore) t.objectStore('bodies').put(respBody.needStore);
