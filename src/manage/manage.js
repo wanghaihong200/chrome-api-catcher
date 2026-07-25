@@ -65,11 +65,15 @@ function applyFilters() {
   const rt = $('responseTimeFilter').value;
   const now = Date.now();
   const rangeMs = timeRangeMs(tf);
+  const customStart = tf === 'custom' && $('customTimeStart')?.value ? new Date($('customTimeStart').value).getTime() : null;
+  const customEnd = tf === 'custom' && $('customTimeEnd')?.value ? new Date($('customTimeEnd').value).getTime() : null;
   state.filtered = state.all.filter((r) => {
     if (q && !(`${r.url} ${r.method} ${r.status}`.toLowerCase().includes(q))) return false;
     if (m && r.method !== m) return false;
     if (st && statusClass(r.status) !== st) return false;
     if (rangeMs && now - r.timestamp > rangeMs) return false;
+    if (customStart != null && r.timestamp < customStart) return false;
+    if (customEnd != null && r.timestamp > customEnd) return false;
     if (rt === 'fast' && !(r.duration < 100)) return false;
     if (rt === 'normal' && !(r.duration >= 100 && r.duration <= 500)) return false;
     if (rt === 'slow' && !(r.duration > 500)) return false;
@@ -180,7 +184,11 @@ function renderActiveFilters() {
   const q = $('searchInput').value.trim(); if (q) active.push(`搜索:${q}`);
   if ($('methodFilter').value) active.push(`方法:${$('methodFilter').value}`);
   if ($('statusFilter').value) active.push(`状态:${$('statusFilter').value}`);
-  if ($('timeFilter').value) active.push(`时间:${$('timeFilter').selectedOptions[0].textContent}`);
+  if ($('timeFilter').value === 'custom') {
+    active.push(`时间:${$('customTimeStart')?.value || '?'} ~ ${$('customTimeEnd')?.value || '?'}`);
+  } else if ($('timeFilter').value) {
+    active.push(`时间:${$('timeFilter').selectedOptions[0].textContent}`);
+  }
   if ($('responseTimeFilter').value) active.push(`响应:${$('responseTimeFilter').selectedOptions[0].textContent}`);
   const box = $('activeFilters');
   const clearBtn = $('clearFiltersBtn');
@@ -366,7 +374,16 @@ async function doExport(format) {
 
 // ---- 事件绑定 ----
 $('searchInput').addEventListener('input', applyFilters);
-['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => $(id).addEventListener('change', applyFilters));
+['methodFilter', 'statusFilter', 'responseTimeFilter'].forEach((id) => $(id).addEventListener('change', applyFilters));
+$('timeFilter').addEventListener('change', () => {
+  const custom = $('timeFilter').value === 'custom';
+  $('customTimeStart')?.classList.toggle('hidden', !custom);
+  $('customTimeSep')?.classList.toggle('hidden', !custom);
+  $('customTimeEnd')?.classList.toggle('hidden', !custom);
+  applyFilters();
+});
+$('customTimeStart')?.addEventListener('change', applyFilters);
+$('customTimeEnd')?.addEventListener('change', applyFilters);
 $('pageSize').addEventListener('change', (e) => { state.pageSize = Number(e.target.value); state.page = 1; render(); });
 $('pageNav').addEventListener('click', (e) => {
   const b = e.target.closest('[data-page]'); if (!b) return;
@@ -391,6 +408,11 @@ if (clearSelBtn) clearSelBtn.addEventListener('click', () => { state.selected.cl
 $('clearFiltersBtn').addEventListener('click', () => {
   $('searchInput').value = '';
   ['methodFilter', 'statusFilter', 'timeFilter', 'responseTimeFilter'].forEach((id) => ($(id).value = ''));
+  if ($('customTimeStart')) $('customTimeStart').value = '';
+  if ($('customTimeEnd')) $('customTimeEnd').value = '';
+  $('customTimeStart')?.classList.add('hidden');
+  $('customTimeSep')?.classList.add('hidden');
+  $('customTimeEnd')?.classList.add('hidden');
   applyFilters();
 });
 
