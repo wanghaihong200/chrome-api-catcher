@@ -13,6 +13,8 @@
 - 🗂️ **二进制 body 捕获**:FormData / Blob / ArrayBuffer 等二进制请求体以 base64 保存,cURL 与导出均支持。
 - 🧹 **去重**:同一请求被 inject + devtools 双抓时自动合并(响应体/请求头更完整者优先,保留 devtools 的 Cookie 等完整头)。
 
+![管理页-接口列表](assets/manage-list.png)
+
 ## 安装
 
 1. 下载或 clone 本仓库到本地。
@@ -52,6 +54,8 @@
 
 - 列表行内 **复制图标**:一键复制该请求的 cURL(默认含敏感头)。
 - **眼睛图标**:打开详情 Modal,可查看 Request/Response Headers、请求体、响应体;**cURL 标签页**展示 cURL,可用「🔒 隐藏敏感头 / 🔓 显示敏感头」按钮切换,复制按当前状态。
+
+![详情-cURL 标签页](assets/detail-curl.png)
 
 ### 5. 批量导出
 
@@ -105,4 +109,4 @@ manifest.json  MV3 清单
 
 ## 许可
 
-私有项目。
+本项目基于 [Apache License 2.0](LICENSE) 开源。

@@ -2,4 +2,8 @@ node_modules/
 *.log
 .DS_Store
 .superpowers/
-.test-profile/
+.test-profile*/
+.test-debug*/
+.preview-profile/
+_preview.mjs
+dashboard-preview.html
