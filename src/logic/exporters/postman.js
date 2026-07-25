@@ -22,7 +22,8 @@ function toItem(d) {
 }
 export function exportPostman(details) {
   return JSON.stringify({
-    info: { _postman_id: 'api-catcher-export', name: 'API Catcher Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+    info: { _postman_id: 'api-catcher-export', name: 'API Catcher Export', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      description: '由 API Catcher 导出。注意:二进制请求体(mode:raw)以 base64 字符串给出,重放前需解码。' },
     item: (details || []).map(toItem),
   }, null, 2);
 }

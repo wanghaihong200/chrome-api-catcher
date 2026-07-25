@@ -205,8 +205,8 @@ async function openDetail(id) {
   $('modalUrl').textContent = r.url;
   $('modalMeta').textContent = `${r.status} ${r.statusText || ''} · ${r.duration || 0}ms · ${formatTime(r.timestamp)} · ${r.source}`;
   renderHeaders(r);
-  renderBody('content-request', r.requestBody);
-  renderBody('content-response', r.responseBody);
+  renderBody('content-request', r.requestBody, r.requestBodyIsBinary);
+  renderBody('content-response', r.responseBody, r.responseBodyIsBinary);
   const cc = $('content-curl');
   if (cc) {
     cc.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow">
@@ -232,9 +232,14 @@ function renderHeaders(r) {
     </div>`;
   $('content-headers').innerHTML = block('Request Headers', r.requestHeaders, 'text-brand-500') + block('Response Headers', r.responseHeaders, 'text-success');
 }
-function renderBody(boxId, content) {
+function renderBody(boxId, content, isBinary) {
   const box = $(boxId);
   if (content == null || content === '') { box.innerHTML = '<div class="bg-white rounded-[12px] p-5 card-shadow text-[12px] text-surface-400">无内容</div>'; return; }
+  if (isBinary) {
+    const len = typeof content === 'string' ? content.length : 0;
+    box.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow text-[12px] text-surface-400">[二进制数据,${len} 字符 base64]</div>`;
+    return;
+  }
   let pretty = content;
   try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch { /* 非 JSON 原样 */ }
   box.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow"><pre class="code-block">${escapeHtml(pretty)}</pre></div>`;
@@ -362,7 +367,7 @@ async function doExport(format) {
   a.href = URL.createObjectURL(blob);
   a.download = `api-catcher-${format}-${Date.now()}.${extOf(format)}`;
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast(`已导出 ${details.length} 条(${format})`);
 }
 

@@ -14,4 +14,5 @@ export const ICONS = {
   clock: s('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   check: s('<path d="m5 12 5 5 9-11"/>'),
   info: s('<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4"/>'),
+  copy: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
 };

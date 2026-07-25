@@ -24,7 +24,7 @@ export function toCurl(detail, { includeSensitive = false } = {}) {
   }
 
   if (detail.requestBodyIsBinary && detail.requestBody) {
-    notes.push('# 请求体为二进制(base64 编码,重放需先解码)');
+    notes.push('# 请求体为二进制(base64 编码,重放需先解码,需 bash 环境)');
     parts.push("--data-binary @<(printf '%s' '" + detail.requestBody + "' | base64 -d)");
   } else if (detail.requestBody) {
     parts.push('--data', shellQuote(detail.requestBody));

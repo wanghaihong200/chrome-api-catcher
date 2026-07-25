@@ -1,8 +1,20 @@
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 function sampler(d) {
-  const headers = (d.requestHeaders || [])
-    .map((h) => '        <Header name="' + esc(h.name) + '" value="' + esc(h.value) + '"/>').join('\n');
+  const headerElems = (d.requestHeaders || []).map((h) => `            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">${esc(h.name)}</stringProp>
+              <stringProp name="Header.value">${esc(h.value)}</stringProp>
+            </elementProp>`).join('\n');
+  const headerManager = headerElems
+    ? `      <hashTree>
+        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+${headerElems}
+          </collectionProp>
+        </HeaderManager>
+        <hashTree/>
+      </hashTree>`
+    : '      <hashTree/>';
   let bodyProp = '';
   if (d.requestBody != null) {
     if (d.requestBodyIsBinary) {
@@ -13,14 +25,12 @@ function sampler(d) {
     }
   }
   const method = esc(d.method || 'GET');
-  return '      <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="' + method + ' ' + esc(d.url) + '" enabled="true">' + '\n' +
-    '        <stringProp name="HTTPSampler.method">' + method + '</stringProp>' + '\n' +
-    '        <stringProp name="HTTPSampler.path">' + esc(d.url) + '</stringProp>' + '\n' +
-    bodyProp + '\n' +
-    '      </HTTPSamplerProxy>' + '\n' +
-    '      <hashTree>' + '\n' +
-    (headers || '        <!-- no headers -->') + '\n' +
-    '      </hashTree>';
+  return `      <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="${method} ${esc(d.url)}" enabled="true">
+        <stringProp name="HTTPSampler.method">${method}</stringProp>
+        <stringProp name="HTTPSampler.path">${esc(d.url)}</stringProp>
+${bodyProp}
+      </HTTPSamplerProxy>
+${headerManager}`;
 }
 
 export function exportJmeter(details) {
