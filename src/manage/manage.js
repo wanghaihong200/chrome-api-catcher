@@ -5,7 +5,7 @@ import { toCurl, hasSensitive } from '../logic/curl.js';
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
-const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null, selected: new Set(), newCount: 0, pendingIds: new Set(), refreshTimer: null };
+const state = { all: [], filtered: [], page: 1, pageSize: 10, currentDetail: null, selected: new Set(), newCount: 0, pendingIds: new Set(), refreshTimer: null, showSensitive: true };
 
 function isLiveView() {
   const hasFilter = $('searchInput').value.trim() || $('methodFilter').value || $('statusFilter').value
@@ -207,16 +207,7 @@ async function openDetail(id) {
   renderHeaders(r);
   renderBody('content-request', r.requestBody, r.requestBodyIsBinary);
   renderBody('content-response', r.responseBody, r.responseBodyIsBinary);
-  const cc = $('content-curl');
-  if (cc) {
-    cc.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow">
-      <div class="flex justify-between items-center mb-3">
-        <span class="text-[12px] text-surface-400">cURL(默认隐藏敏感头)</span>
-        <button class="modal-copy-curl px-3 py-1 text-[12px] rounded-lg bg-brand-50 text-brand-500 hover:bg-brand-100">${ICONS.copy || ''} 复制</button>
-      </div>
-      <pre class="code-block">${escapeHtml(toCurl(r, { includeSensitive: false }))}</pre>
-    </div>`;
-  }
+  renderCurlTab(r);
   $('detailModal').classList.remove('hidden');
   switchTab('headers');
 }
@@ -255,29 +246,30 @@ function switchTab(tab) {
 }
 function closeDetail() { $('detailModal').classList.add('hidden'); }
 
-// ---- cURL 复制 ----
+// ---- cURL 展示与复制 ----
+function renderCurlTab(detail) {
+  const cc = $('content-curl');
+  if (!cc || !detail) return;
+  const on = state.showSensitive;
+  cc.innerHTML = `<div class="bg-white rounded-[12px] p-5 card-shadow">
+    <div class="flex justify-between items-center mb-3">
+      <button class="curl-toggle px-3 py-1 text-[12px] rounded-lg bg-surface-50 text-surface-500 hover:bg-surface-100">${on ? '🔒 隐藏敏感头' : '🔓 显示敏感头'}</button>
+      <button class="modal-copy-curl px-3 py-1 text-[12px] rounded-lg bg-brand-50 text-brand-500 hover:bg-brand-100">${ICONS.copy || ''} 复制</button>
+    </div>
+    <pre class="code-block">${escapeHtml(toCurl(detail, { includeSensitive: on }))}</pre>
+  </div>`;
+}
+
 async function copyCurlForId(id) {
   const res = await send({ type: 'GET_DETAIL', id });
   const r = res?.record;
   if (!r) { toast('详情读取失败', 'error'); return; }
-  await copyCurlDetail(r);
+  await copyCurlDetail(r, true); // 行内复制默认含敏感头
 }
 
-async function copyCurlDetail(detail) {
-  const redacted = toCurl(detail, { includeSensitive: false });
-  if (!hasSensitive(detail)) {
-    await writeClip(redacted);
-    toast('已复制 cURL');
-    return;
-  }
-  const ok = confirm('此请求含 Cookie/Authorization 等敏感头,复制完整 cURL 可能泄露凭据。\n\n[确定]=复制完整版  [取消]=复制脱敏版(不含敏感头)');
-  if (ok) {
-    await writeClip(toCurl(detail, { includeSensitive: true }));
-    toast('已复制完整 cURL(含敏感头)');
-  } else {
-    await writeClip(redacted);
-    toast('已复制脱敏 cURL');
-  }
+async function copyCurlDetail(detail, includeSensitive = true) {
+  await writeClip(toCurl(detail, { includeSensitive }));
+  toast(includeSensitive && hasSensitive(detail) ? '已复制 cURL(含敏感头)' : '已复制 cURL');
 }
 
 async function writeClip(text) {
@@ -421,7 +413,8 @@ $('globalToggle').addEventListener('click', toggleGlobal);
 $('closeModalBtn').addEventListener('click', closeDetail);
 $('modalBackdrop').addEventListener('click', closeDetail);
 $('detailModal').addEventListener('click', (e) => {
-  if (e.target.closest('.modal-copy-curl') && state.currentDetail) copyCurlDetail(state.currentDetail);
+  if (e.target.closest('.curl-toggle') && state.currentDetail) { state.showSensitive = !state.showSensitive; renderCurlTab(state.currentDetail); return; }
+  if (e.target.closest('.modal-copy-curl') && state.currentDetail) copyCurlDetail(state.currentDetail, state.showSensitive);
 });
 document.querySelectorAll('.detail-tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
