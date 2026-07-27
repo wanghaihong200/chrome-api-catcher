@@ -7,5 +7,6 @@ node_modules/
 .preview-profile/
 _preview.mjs
 _gen_icon.mjs
+_store_shots.mjs
 dist/
 dashboard-preview.html
