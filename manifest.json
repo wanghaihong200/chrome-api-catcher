@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "API Catcher",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "minimum_chrome_version": "111",
   "description": "抓取网页接口调用,生成 curl,支持搜索过滤与导出",
   "permissions": ["storage", "scripting", "activeTab", "tabs"],
@@ -23,5 +23,6 @@
     }
   ],
   "devtools_page": "src/devtools/devtools.html",
-  "action": { "default_title": "API Catcher", "default_popup": "src/popup/popup.html" }
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": { "default_title": "API Catcher", "default_popup": "src/popup/popup.html", "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" } }
 }

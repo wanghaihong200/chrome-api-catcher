@@ -6,4 +6,6 @@ node_modules/
 .test-debug*/
 .preview-profile/
 _preview.mjs
+_gen_icon.mjs
+dist/
 dashboard-preview.html
